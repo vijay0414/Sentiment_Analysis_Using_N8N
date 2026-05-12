@@ -1,6 +1,6 @@
 # Sentiment Analysis Using N8N
 
-A powerful web application that analyzes sentiment from Google Maps reviews using N8N workflow automation. This project extracts reviews from Google Maps locations, aggregates them, and provides sentiment analysis capabilities.
+A powerful web application that analyzes sentiment from both Google Maps reviews and Amazon product reviews using N8N workflow automation. This project extracts reviews from Google Maps locations and Amazon products, aggregates them, and provides sentiment analysis capabilities.
 
 ## 📋 Table of Contents
 
@@ -18,18 +18,20 @@ A powerful web application that analyzes sentiment from Google Maps reviews usin
 
 ## Overview
 
-This application combines the power of N8N workflow automation with a web-based frontend to analyze sentiment from Google Maps reviews. It automatically fetches reviews for specific locations and processes them through an N8N workflow for sentiment analysis.
+This application combines the power of N8N workflow automation with a web-based frontend to analyze sentiment from both Google Maps reviews and Amazon product reviews. It automatically fetches reviews for specific locations and products, processes them through an N8N workflow for sentiment analysis, and provides a unified interface for managing review data.
 
 ## Features
 
 - ✅ **Google Maps Integration**: Extracts place information and reviews from Google Maps
+- ✅ **Amazon Product Reviews**: Fetches and analyzes customer reviews from Amazon products
 - ✅ **N8N Automation**: Automated workflow for review collection and processing
-- ✅ **Web Interface**: Clean, responsive UI for submitting URLs
+- ✅ **Web Interface**: Clean, responsive UI for submitting URLs (Google Maps or Amazon)
 - ✅ **Review Management**: Store and manage collected reviews in memory
-- ✅ **SerpAPI Integration**: Uses SerpAPI for accessing Google Maps data
+- ✅ **SerpAPI Integration**: Uses SerpAPI for accessing Google Maps and Amazon data
 - ✅ **Real-time Webhook Processing**: Receives and processes webhook data from N8N
 - ✅ **RESTful API**: Easy-to-use endpoints for managing reviews
 - ✅ **Express Backend**: Lightweight Node.js server for serving and managing requests
+- ✅ **Multi-Source Analysis**: Compare sentiment across different platforms
 
 ## Architecture
 
@@ -37,31 +39,37 @@ This application combines the power of N8N workflow automation with a web-based 
 ┌─────────────────────────────────────────────────────────┐
 │                      Frontend (index.html)               │
 │              User Interface for URL Submission            │
+│              (Google Maps or Amazon Product URLs)         │
 └──────────────────┬──────────────────────────────────────┘
-                   │ POST (Google Maps URL And Amazon Product URL)
+                   │ POST (URL)
                    ▼
 ┌─────────────────────────────────────────────────────────┐
 │                   N8N Workflow                           │
 │  ┌──────────────┐    ┌──────────────┐                  │
 │  │   Webhook    │───▶│  If (Check   │                  │
-│  │   Receiver   │    │   google.com)│                  │
+│  │   Receiver   │    │   URL Type)  │                  │
 │  └──────────────┘    └──────┬───────┘                  │
 │                             │                           │
-│  ┌──────────────┐    ┌──────▼───────┐                  │
-│  │  Place Name  │◀───│   Extract    │                  │
-│  │  Extractor   │    │   Place Name │                  │
-│  └──────┬───────┘    └──────────────┘                  │
-│         │                                               │
-│  ┌──────▼───────────────────────────────────┐          │
-│  │  SerpAPI - Get Place Information & Reviews│          │
-│  │  - google_maps engine                     │          │
-│  │  - google_maps_reviews engine             │          │
-│  └──────┬──────────────────────────────────┘          │
-│         │                                               │
-│  ┌──────▼───────────────────────────────────┐          │
-│  │   Process & Return Reviews                │          │
-│  │   (Sentiment Analysis Ready)              │          │
-│  └──────────────────────────────────────────┘          │
+│  ┌──────────────┐    ┌──────▼───────┐    ┌──────────────┐ │
+│  │ Google Maps  │◀───│   Route to   │───▶│ Amazon       │ │
+│  │   Path       │    │   Processor  │    │ Product Path │ │
+│  └──────┬───────┘    └──────────────┘    └──────┬───────┘ │
+│         │                                        │         │
+│  ┌──────▼───────────────────────────────────┐    ┌──────▼───────┐ │
+│  │  SerpAPI - Google Maps Engine            │    │  SerpAPI -    │ │
+│  │  - Extract place name                     │    │  Amazon Engine │ │
+│  │  - Get place info & reviews               │    │  - Get product│ │
+│  └──────┬──────────────────────────────────┘    │     reviews    │ │
+│         │                                        └──────┬───────┘ │
+│  ┌──────▼───────────────────────────────────┐           │         │
+│  │   Process & Return Reviews                │    ┌──────▼───────┐ │
+│  │   (Sentiment Analysis Ready)              │    │   Process &   │ │
+│  │                                           │    │   Return      │ │
+│  └───────────────────────────────────────────┘    │   Reviews     │ │
+│                                                   │   (Sentiment   │ │
+│                                                   │    Analysis    │ │
+│                                                   │     Ready)     │ │
+│                                                   └───────────────┘ │
 └─────────────────┬──────────────────────────────────────┘
                   │ POST (Reviews & Data)
                   ▼
@@ -83,6 +91,7 @@ Before you begin, ensure you have the following installed:
 - **N8N** (version 0.x or higher) - [Installation Guide](https://docs.n8n.io/hosting/installation/)
 - **SerpAPI Key** - [Get API Key](https://serpapi.com/)
 - A **Google Maps URL** from a location (e.g., https://www.google.com/maps/place/...)
+- An **Amazon Product URL** (e.g., https://www.amazon.com/dp/B08N5WRWNW)
 
 ## Installation
 
@@ -145,23 +154,33 @@ For testing without a deployed N8N instance:
 ### Via Web Interface
 
 1. Open `http://localhost:3000` in your browser
-2. Enter a Google Maps location URL (e.g., https://www.google.com/maps/place/Statue+of+Liberty/...)
+2. Enter a URL:
+   - **Google Maps**: Enter a Google Maps location URL (e.g., https://www.google.com/maps/place/Statue+of+Liberty/...)
+   - **Amazon Product**: Enter an Amazon product URL (e.g., https://www.amazon.com/dp/B08N5WRWNW)
 3. Click **Submit**
 4. The N8N workflow will:
-   - Extract the location name
-   - Fetch place information from Google Maps
-   - Retrieve reviews for the location
+   - Detect the URL type (Google Maps or Amazon)
+   - Extract the relevant information (place name or product ID)
+   - Fetch reviews using SerpAPI
    - Send the reviews to your backend
 5. View collected reviews in the application
 
 ### Via API
 
-#### Submit a URL to N8N Workflow
+#### Submit a Google Maps URL to N8N Workflow
 
 ```bash
 curl -X POST https://your-n8n-instance.com/webhook/sentiment-analysis \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.google.com/maps/place/..."}'
+  -d '{"url": "https://www.google.com/maps/place/Statue+of+Liberty/..."}'
+```
+
+#### Submit an Amazon Product URL to N8N Workflow
+
+```bash
+curl -X POST https://your-n8n-instance.com/webhook/sentiment-analysis \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.amazon.com/dp/B08N5WRWNW"}'
 ```
 
 #### Receive Reviews
@@ -176,7 +195,9 @@ Response:
   "reviews": [
     "Great place to visit!",
     "Amazing experience...",
-    "Highly recommended..."
+    "Highly recommended...",
+    "This product exceeded my expectations!",
+    "Great value for money..."
   ]
 }
 ```
@@ -198,12 +219,31 @@ curl -X POST http://localhost:3000/clear-reviews
 
 ### Webhook Payload Format
 
+#### Google Maps Review Payload
 ```json
 {
-  "review": "Review text here",
-  "place_id": "place_id_from_google",
+  "review": "Great place to visit! Amazing experience with friendly staff.",
+  "place_id": "ChIJd8rqiQawMzMRlT94X3kIi3g",
   "rating": 4.5,
-  "timestamp": "2024-01-15T10:30:00Z"
+  "timestamp": "2024-01-15T10:30:00Z",
+  "source": "google_maps",
+  "place_name": "Statue of Liberty"
+}
+```
+
+#### Amazon Product Review Payload
+```json
+{
+  "review": "This product exceeded my expectations! Great value for money.",
+  "rating": 5,
+  "title": "Excellent Product",
+  "reviewer": "John Doe",
+  "date": "2024-01-15",
+  "verified_purchase": true,
+  "helpful_votes": 12,
+  "source": "amazon",
+  "product_asin": "B08N5WRWNW",
+  "product_title": "Wireless Bluetooth Headphones"
 }
 ```
 
@@ -213,24 +253,37 @@ curl -X POST http://localhost:3000/clear-reviews
 
 The `Sentiment Analysis.json` workflow includes:
 
-1. **Webhook Trigger**: Receives incoming URLs
-2. **If Condition**: Validates that URL contains "google.com/maps"
-3. **Place Name Extractor**: Uses regex to extract location name from URL
-4. **Google Maps API Call**: Fetches place information using SerpAPI
-5. **Reviews Fetcher**: Retrieves reviews for the place
-6. **Data Processor**: Processes and formats the data
+1. **Webhook Trigger**: Receives incoming URLs (Google Maps or Amazon)
+2. **URL Type Detection**: Determines if URL is Google Maps or Amazon product
+3. **Conditional Routing**: Routes to appropriate processing path
+4. **Google Maps Path**:
+   - Place Name Extractor: Uses regex to extract location name from URL
+   - Google Maps API Call: Fetches place information using SerpAPI
+   - Reviews Fetcher: Retrieves reviews for the place
+5. **Amazon Product Path**:
+   - Product ID Extractor: Extracts ASIN from Amazon URL
+   - Amazon API Call: Fetches product reviews using SerpAPI
+   - Reviews Processor: Formats Amazon review data
+6. **Data Processor**: Processes and formats the data from both sources
 7. **Webhook Response**: Sends collected data to backend
 
 ### How It Works
 
-1. User submits a Google Maps URL via the frontend
+1. User submits a URL via the frontend (Google Maps or Amazon)
 2. N8N webhook receives the URL
-3. Workflow validates and extracts the place name
-4. SerpAPI is called to fetch:
-   - Place details (ratings, address, opening hours, etc.)
-   - Reviews (sentiment data)
+3. Workflow detects URL type and routes accordingly:
+   - **Google Maps**: Extracts place name → Fetches place details and reviews
+   - **Amazon**: Extracts product ASIN → Fetches product reviews
+4. SerpAPI is called with appropriate engine:
+   - `google_maps` and `google_maps_reviews` for Google Maps
+   - `amazon_product` for Amazon reviews
 5. Reviews are processed and sent back to the Express backend
-6. Backend stores reviews for analysis
+6. Backend stores reviews for analysis and display
+
+### Supported URL Formats
+
+- **Google Maps**: `https://www.google.com/maps/place/...`
+- **Amazon**: `https://www.amazon.com/dp/ASIN` or `https://www.amazon.com/product-name/dp/ASIN`
 
 ## File Structure
 
@@ -245,13 +298,18 @@ Sentiment_Analysis_Using_N8N/
 
 ## Future Enhancements
 
-- [ ] Implement actual sentiment analysis (using libraries like sentiment.js)
+- [ ] Implement actual sentiment analysis (using libraries like sentiment.js or natural language processing)
 - [ ] Database integration (MongoDB, PostgreSQL) for persistent storage
-- [ ] Advanced filtering and search capabilities
-- [ ] Sentiment visualization (charts, graphs)
-- [ ] Multi-location comparison
-- [ ] Email notifications
+- [ ] Advanced filtering and search capabilities (by rating, date, platform)
+- [ ] Sentiment visualization (charts, graphs, word clouds)
+- [ ] Multi-source comparison (Google Maps vs Amazon reviews)
+- [ ] Product vs Location sentiment correlation analysis
+- [ ] Review language detection and translation
+- [ ] Export functionality (CSV, PDF reports)
+- [ ] Email notifications for new reviews
 - [ ] Authentication and user accounts
+- [ ] Review spam detection and filtering
+- [ ] Integration with additional review platforms (Yelp, TripAdvisor, etc.)
 
 ## Troubleshooting
 
@@ -262,10 +320,18 @@ Sentiment_Analysis_Using_N8N/
 - **Solution**: Ensure N8N workflow is deployed and the webhook URL is correctly configured in index.html
 
 ### Issue: "No reviews returned"
-- **Solution**: 
-  - Verify the Google Maps URL is valid and contains a place ID
-  - Check SerpAPI supports the location
-  - Ensure your SerpAPI plan includes review access
+- **Solution**:
+  - **For Google Maps**: Verify the URL is valid and contains a place ID, check SerpAPI supports the location
+  - **For Amazon**: Verify the product URL contains a valid ASIN (Amazon Standard Identification Number)
+  - Ensure your SerpAPI plan includes review access for both Google Maps and Amazon
+
+### Issue: "URL not recognized"
+- **Solution**: Ensure you're using supported URL formats:
+  - Google Maps: `https://www.google.com/maps/place/...`
+  - Amazon: `https://www.amazon.com/dp/ASIN` or `https://www.amazon.com/product-name/dp/ASIN`
+
+### Issue: "Amazon product not found"
+- **Solution**: Verify the Amazon product exists and is available in your region. Some products may not have reviews or may be region-locked.
 
 ### Issue: "Port 3000 already in use"
 - **Solution**: Change the port in server.js:
