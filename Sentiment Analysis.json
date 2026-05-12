@@ -1,0 +1,508 @@
+{
+  "name": "Sentiment Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9dfcf7f6-a43d-4bdf-9f83-b81cb9186dba",
+              "leftValue": "={{ $json.body.url }}",
+              "rightValue": "google.com/maps",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1408,
+        -128
+      ],
+      "id": "bfb859a3-f186-4c4b-9df3-1cf510d3964c",
+      "name": "if, to check the URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: URL from a previous node\nconst url = $input.first().json.body.url;\n\n// Use regex to extract the place name after '/place/' and before the next '/'\nconst match = url.match(/\\/place\\/([^\\/]+)\\//);\n\nconst placeName = match ? decodeURIComponent(match[1].replace(/\\+/g, ' ')) : null;\n\n// Return result\nreturn [\n  {\n    json: {\n      placeName\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -224
+      ],
+      "id": "c7221839-96ae-47ba-b571-d859fd82a50d",
+      "name": "placeName"
+    },
+    {
+      "parameters": {
+        "url": "=https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.placeName }}"
+            },
+            {
+              "name": "engine",
+              "value": "google_maps"
+            },
+            {
+              "name": "api_key",
+              "value": "API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1072,
+        -224
+      ],
+      "id": "85ce769e-77e3-4ff9-b8d2-31e34ddfb347",
+      "name": "aboutPlace"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_maps_reviews"
+            },
+            {
+              "name": "place_id",
+              "value": "={{ $json.place_results.place_id }}"
+            },
+            {
+              "name": "api_key",
+              "value": "API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -864,
+        -224
+      ],
+      "id": "2930bc0a-3c65-48ca-8c08-13d95ecf1092",
+      "name": "Fetch Reviews"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- STEP 1: Extract input ---\nlet input = $input.all()[0].json;\n\n// If input is wrapped inside an array, unwrap first element\nif (Array.isArray(input)) {\n    input = input[0];\n}\n\n// Reviews array from previous node\nconst reviews = input?.reviews || [];\nconst name = input?.name || [];\n// --- STEP 2: Sort by iso_date (newest first) ---\nconst sorted = reviews.sort((a, b) => {\n    if (a.iso_date && b.iso_date) {\n        return new Date(b.iso_date) - new Date(a.iso_date);\n    }\n    return 0;\n});\n\n// --- STEP 3: Take latest 10 reviews ---\nconst latest10 = sorted.slice(0, 10);\n\n// --- STEP 4: Extract pure text from each review ---\nconst reviewsarray = latest10.map(r =>\n    r.extracted_snippet?.original ||\n    r.snippet ||\n    \"\"\n).filter(t => t.trim() !== \"\");\n\n// --- STEP 5: Prepare individual array for Telegram ---\n// const telegramArray = reviewsarray.map((review, index) => ({\n//     review_number: index + 1,\n//     review: review\n// }));\n\n// --- STEP 6: Return as a single item containing array ---\nconst namearray = latest10.map(r =>\n    r.user?.name ||\n    \"\"\n).filter(t => t.trim() !== \"\");\nreturn [\n    {\n        json: {\n            reviewsarray:reviewsarray,\n            // reviews_for_telegram: telegramArray\n          namearray: namearray\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        -224
+      ],
+      "id": "ccb4642a-8ec7-44ef-8531-59b099d24379",
+      "name": "ReviewsArray",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/webhook",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "review",
+              "value": "={{ $json.reviewsarray}}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.namearray }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -288,
+        -224
+      ],
+      "id": "393a8cdf-58f5-433c-bd1a-d913f42b37ae",
+      "name": "Send Reviews To Website"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url = $input.first().json.body.url;\n\n// Remove query params\nconst cleanUrl = url.split(\"?\")[0];\n\n// Split into parts\nconst parts = cleanUrl.split(\"/\");\n\n// Find \"dp\" index (this appears in all Amazon product URLs)\nconst dpIndex = parts.indexOf(\"dp\");\n\n// If dp exists, the product name is the segment before it\nlet productName = \"\";\nif (dpIndex > 0) {\n    productName = parts[dpIndex - 1];\n}\n\n// Replace dashes with spaces for readability\nconst readableName = productName.replace(/-/g, \" \");\n// Extract ASIN\nlet asin = \"\";\nconst asinMatch = url.match(/\\/dp\\/([A-Z0-9]{10})/) || url.match(/\\/product\\/([A-Z0-9]{10})/);\nif (asinMatch) asin = asinMatch[1];\n\n// Extract Amazon domain\nconst domainMatch = url.match(/amazon\\.(in|com|co\\.uk|ca|de|fr|ae)/i);\nconst amazonDomain = domainMatch ? `amazon.${domainMatch[1]}` : \"amazon.com\";\n\n// Return both raw + readable\nreturn [\n    {\n        json: {\n            product_name_raw: productName,\n            product_name: readableName,\n            asin,\n            amazonDomain\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -48
+      ],
+      "id": "b6f94041-1251-4a7a-b52d-6625407159bc",
+      "name": "Extract ProductName"
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "k",
+              "value": "={{ $json.product_name }}"
+            },
+            {
+              "name": "engine",
+              "value": "amazon_product"
+            },
+            {
+              "name": "asin",
+              "value": "={{ $json.asin }}"
+            },
+            {
+              "name": "amazon_domain",
+              "value": "={{ $json.amazonDomain }}"
+            },
+            {
+              "name": "api_key",
+              "value": "API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -976,
+        -48
+      ],
+      "id": "272dc5ee-9792-4ab0-a687-31dfdec59732",
+      "name": "Fetch Reviews1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- STEP 1: Extract input ---\nlet input = $input.all()[0].json;\n\n// If input is wrapped inside an array, unwrap first element\nif (Array.isArray(input)) {\n    input = input[0];\n}\n\n// --- STEP 2: Get author reviews array ---\nconst authorReviewsArray = input.reviews_information && input.reviews_information.authors_reviews\n    ? input.reviews_information.authors_reviews\n    : [];\n\n// --- STEP 3: Sort by date (newest first) ---\nconst sorted = authorReviewsArray.sort((a, b) => {\n    if (a.date && b.date) {\n        return new Date(b.date) - new Date(a.date);\n    }\n    return 0;\n});\n\n// --- STEP 4: Take latest 10 reviews ---\nconst latest10 = sorted.slice(0, 10);\n\n// --- STEP 5: Extract text from each review ---\nconst reviewsarray = latest10.map(r => r.text || \"\").filter(t => t.trim() !== \"\");\n\n// --- STEP 6: Prepare individual array for Telegram ---\nconst telegramArray = latest10.map((r, index) => ({\n    review_number: index + 1,\n    author: r.author,\n    rating: r.rating,\n    date: r.date,\n    text: r.text\n}));\n\n// --- STEP 7: Return as a single item containing arrays ---\nreturn [\n    {\n        json: {\n            reviewsarray: reviewsarray,\n            // reviews_for_telegram: telegramArray\n        }\n    }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        -48
+      ],
+      "id": "0e4026e9-428a-4365-b53d-b8e3f8372489",
+      "name": "ReviewsArray1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze the sentiment of the following text and return the result as percentages.\n\nClassify the sentiment into:\n- Positive\n- Negative\n- Neutral\n\nRules:\n- Output ONLY numeric percentages\n- Percentages must total 100%\n- Do NOT include explanations, labels, or any extra text\n- Use numeric values only, followed by the % sign\n- Provide results separately for each model\n- give accurate and correct sentiment report\n\nModels to use:\n- LSTM\n- BERD\n- VADER\n\nText:\n{{ $json.reviewsarray }}\n\nOutput format (exactly) for each model:\n\nLSTM\nPositive: X%\nNegative: Y%\nNeutral: Z%\n\nBERD\nPositive: X%\nNegative: Y%\nNeutral: Z%\n\nVADER\nPositive: X%\nNegative: Y%\nNeutral: Z%\n\n\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -528,
+        -48
+      ],
+      "id": "3441fa6e-687c-47d4-a635-4f7500626e1c",
+      "name": "AI for Sentiment Analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get AI output from previous node\nconst text = $input.first().json.output || \"\";\n// Split by two or more newlines to separate model blocks\nconst modelBlocks = text.split(/\\n\\s*\\n+/).filter(Boolean);\n\n// Build a plain JS array\nconst models = modelBlocks.map(block => {\n    const lines = block.split('\\n').map(l => l.trim()).filter(Boolean);\n\n    return {\n        model: lines[0] || 'Unknown',\n        positive: Number(lines[1]?.match(/Positive:\\s*(\\d+(?:\\.\\d+)?)%/i)?.[1] || 0),\n        negative: Number(lines[2]?.match(/Negative:\\s*(\\d+(?:\\.\\d+)?)%/i)?.[1] || 0),\n        neutral:  Number(lines[3]?.match(/Neutral:\\s*(\\d+(?:\\.\\d+)?)%/i)?.[1] || 0)\n    };\n});\n\n// ✅ Return ONE n8n item with an array inside\nreturn [\n  {\n    json: {\n      models\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        -48
+      ],
+      "id": "e6610f3e-9541-4175-887a-6c7f1223ae89",
+      "name": "AI output in JSON"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"positivelstm\": {{ $json.models[0].positive }},\n  \"negativelstm\": {{ $json.models[0].negative }},\n  \"neutrallstm\": {{ $json.models[0].neutral }},\n\n   \"positiveberd\": {{ $json.models[1].positive }},\n  \"negativeberd\": {{ $json.models[1].negative }},\n  \"neutralberd\": {{ $json.models[1].neutral }},\n\n  \"positivevader\": {{ $json.models[2].positive }},\n  \"negativevader\": {{ $json.models[2].negative }},\n  \"neutralvader\": {{ $json.models[2].neutral }}\n}\n",
+        "options": {
+          "responseCode": 200,
+          "enableStreaming": false
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        32,
+        -48
+      ],
+      "id": "7bbaa6ac-df97-4375-9642-0b4894e7bcbd",
+      "name": "Respond sentiment to Webhook"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "reviewsarray, namearray",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        -224
+      ],
+      "id": "5c87162b-4401-46db-a73f-fdd7ec1d61bc",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "POST",
+          "GET"
+        ],
+        "path": "752b8d6f-ad65-4bd4-a2ee-66a49ac43926",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1616,
+        -128
+      ],
+      "id": "48dc44be-6e8e-4e75-a5c2-d9708d673c87",
+      "name": "webhook to listen",
+      "webhookId": "752b8d6f-ad65-4bd4-a2ee-66a49ac43926"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        176
+      ],
+      "id": "4d4f8aee-da6d-4482-8fc2-0535c86b0c92",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Z9xzJh1uSYIuSW5g",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "if, to check the URL": {
+      "main": [
+        [
+          {
+            "node": "placeName",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract ProductName",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "placeName": {
+      "main": [
+        [
+          {
+            "node": "aboutPlace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aboutPlace": {
+      "main": [
+        [
+          {
+            "node": "Fetch Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Reviews": {
+      "main": [
+        [
+          {
+            "node": "ReviewsArray",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReviewsArray": {
+      "main": [
+        [
+          {
+            "node": "AI for Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reviews To Website": {
+      "main": [
+        []
+      ]
+    },
+    "Extract ProductName": {
+      "main": [
+        [
+          {
+            "node": "Fetch Reviews1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Reviews1": {
+      "main": [
+        [
+          {
+            "node": "ReviewsArray1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReviewsArray1": {
+      "main": [
+        [
+          {
+            "node": "AI for Sentiment Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI for Sentiment Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI output in JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI output in JSON": {
+      "main": [
+        [
+          {
+            "node": "Respond sentiment to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Send Reviews To Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook to listen": {
+      "main": [
+        [
+          {
+            "node": "if, to check the URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "if, to check the URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI for Sentiment Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "60714f8b-f688-46bb-9335-bb50052b7a05",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0e37f80a0323ec1350074e6c985164464c2386b3bc1b8d2cae79c1c2a1d26565"
+  },
+  "id": "xbpkRudpzgGHTzgY",
+  "tags": []
+}
