@@ -38,7 +38,7 @@ This application combines the power of N8N workflow automation with a web-based 
 │                      Frontend (index.html)               │
 │              User Interface for URL Submission            │
 └──────────────────┬──────────────────────────────────────┘
-                   │ POST (Google Maps URL)
+                   │ POST (Google Maps URL And Amazon Product URL)
                    ▼
 ┌─────────────────────────────────────────────────────────┐
 │                   N8N Workflow                           │
